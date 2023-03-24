@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -14,8 +13,6 @@ import (
 	"github.com/kurin/blazer/b2"
 )
 
-const writers = 10
-
 func main() {
 	log.SetOutput(os.Stdout)
 
@@ -23,6 +20,7 @@ func main() {
 		keyID      string
 		appID      string
 		bucketName string
+		writers    int
 		src        string
 		dst        string
 	)
@@ -32,6 +30,7 @@ func main() {
 	flag.StringVar(&bucketName, "bucketName", "", "BlackBlaze Bucket name")
 	flag.StringVar(&src, "src", "", "Source (file or folder)")
 	flag.StringVar(&dst, "dst", "", "Destination (file or folder)")
+	flag.IntVar(&writers, "writers", 10, "Number of writes")
 
 	flag.Parse()
 
@@ -58,7 +57,7 @@ func main() {
 	isDir := checkFileIsDir(src)
 
 	ctx := context.Background()
-	b2Client, err := b2.NewClient(ctx, keyID, appID)
+	b2Client, err := b2.NewClient(ctx, appID, keyID)
 	if err != nil {
 		log.Fatalf("could not create BlackBlaze client %v", err)
 	}
@@ -71,11 +70,10 @@ func main() {
 	var files []string
 
 	if isDir {
-		dirFiles, err := ioutil.ReadDir(src)
+		dirFiles, err := os.ReadDir(src)
 		if err != nil {
 			log.Fatalf("could not read files inside directory: %v", err)
 		}
-
 		for _, f := range dirFiles {
 			files = append(files, path.Join(src, f.Name()))
 		}
@@ -88,7 +86,7 @@ func main() {
 		baseName := filepath.Base(f)
 		dst := fmt.Sprintf("%s/%s", dst, baseName)
 		log.Printf("[%d/%d] - uploading: %s\n", i+1, total, f)
-		err := uploadFile(ctx, bucket, f, dst)
+		err := uploadFile(ctx, bucket, f, dst, writers)
 		if err != nil {
 			log.Fatalf("could not upload file %q to bucket: %v", f, err)
 		}
@@ -106,7 +104,7 @@ func checkFileIsDir(src string) bool {
 	return fileInfo.IsDir()
 }
 
-func uploadFile(ctx context.Context, bucket *b2.Bucket, src, dst string) error {
+func uploadFile(ctx context.Context, bucket *b2.Bucket, src, dst string, writers int) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("could not open the file %q: %w", src, err)
